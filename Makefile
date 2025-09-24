@@ -1,5 +1,5 @@
 TARGET=lzpi
-CFLAGS += -std=c11 -Ofast -D_POSIX_C_SOURCE=200112L -Wall -Wextra -pedantic
+CFLAGS += -std=c11 -O3 -ffast-math -D_POSIX_C_SOURCE=200112L -Wall -Wextra -pedantic
 
 all: $(TARGET)
 

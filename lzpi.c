@@ -46,33 +46,11 @@
 #endif
 
 #ifdef __clang__
-#define CLANG_WI_PS                             \
-	_Pragma("GCC diagnostic push") _Pragma( \
-		"GCC diagnostic ignored \"-Wsometimes-uninitialized\"")
-#define CLANG_WI_PP _Pragma("GCC diagnostic pop")
-#define CLANG_WI(x) CLANG_WI_PS(x) CLANG_WI_PP
+#define uninitialized(x) x = *&x
+#elif defined(__INTEL_COMPILER)
+#define uninitialized(x) x
 #else
-#define CLANG_WI_PS
-#define CLANG_WI_PP
-#define CLANG_WI(x) (x)
-#endif
-
-#ifndef __clang__
-#define GCC_WI_PS                      \
-	_Pragma("GCC diagnostic push") \
-		_Pragma("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")
-#define GCC_WI_PP _Pragma("GCC diagnostic pop")
-#define GCC_WI(x)                    \
-	__extension__({              \
-		GCC_WI_PS;           \
-		typeof(x) res = (x); \
-		GCC_WI_PP;           \
-		res;                 \
-	})
-#else
-#define GCC_WI_PS
-#define GCC_WI_PP
-#define GCC_WI(x) (x)
+#define uninitialized(x) x = x
 #endif
 
 #ifdef __INTEL_COMPILER
@@ -290,11 +268,11 @@ static struct match match(struct wnd *w)
 	/* not worth encoding */
 	if (UNLIKELY(
 		    p.l < 2 ||
-		    p.l == 2 && ring_size(&w->lookahead) > 3 &&
+		    (p.l == 2 && ring_size(&w->lookahead) > 3 &&
 			    w->bf[ring_mask(tl + 2)] == w->bf[ring_mask(tl)] &&
 			    (w->bf[ring_mask(tl + 3)] == w->bf[ring_mask(tl)] ||
 			     w->bf[ring_mask(tl + 3)] ==
-				     w->bf[ring_mask(w->dictionary.tl + p.l)]))) {
+				     w->bf[ring_mask(w->dictionary.tl + p.l)])))) {
 		m.v = w->bf[ring_mask(tl)];
 		m.l = 0;
 
@@ -422,19 +400,19 @@ static int decompress(FILE *i, FILE *o)
 {
 	uint8_t buf[RING_SIZE];
 	struct match m = { 0 };
-	register uint32_t map;
+	uint32_t uninitialized(map);
 	register uint32_t msk = (1 << 31) | (1 << 23) | (1 << 15) | (1 << 7);
 	register int c;
 
 	while (LIKELY((c = getc_unlocked(i)) >= 0)) {
-		if (CLANG_WI(UNLIKELY((msk = rol(msk)) & 1)))
+		if (UNLIKELY((msk = rol(msk)) & 1))
 			if (map = c, UNLIKELY((c = getc_unlocked(i)) < 0))
 				goto readfail;
-		if (GCC_WI(UNLIKELY(map & msk))) {
+		if (UNLIKELY(map & msk)) {
 			if (m.l = c + 1, UNLIKELY((c = getc_unlocked(i)) < 0))
 				goto readfail;
 			do {
-				buf[m.o] = ICX_WI(buf[(uint8_t)(m.o - m.l)]);
+				buf[m.o] = buf[(uint8_t)(m.o - m.l)];
 				if (UNLIKELY(putc_unlocked(buf[m.o++], o) < 0))
 					goto writefail;
 			} while (LIKELY(c--));
@@ -503,3 +481,4 @@ int main(int argc, char **argv)
 	}
 	return ret;
 }
+
